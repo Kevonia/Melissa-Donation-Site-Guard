@@ -63,16 +63,6 @@ coming soon
 
 ---
 
-## 📱 Mobile Compatibility
-- **Chrome Mobile (Android/iOS)** does *not* support extensions.
-- To use on mobile:
-  - Install **[Kiwi Browser](https://play.google.com/store/apps/details?id=com.kiwibrowser.browser)** (Android).
-  - Or use a **web version / PWA** via:
-    ```
-    https://supportjamaica.gov.jm/cyberwatch
-    ```
-
----
 
 ## 🧑‍💻 Developer Info
 **Maintainer:** Kevonia Tomlinson
