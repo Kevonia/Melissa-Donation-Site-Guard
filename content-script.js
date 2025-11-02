@@ -40,13 +40,13 @@
       }
     }
 
-    const bodyText = document.body.innerText || '';
-    if (/urgent|immediately|act now|send money|paypal|western union|venmo|gift card/i.test(bodyText)) {
-      if (!trusted.includes(hostname) && !hostname.endsWith('.gov.jm')) {
-        showWarning('This page contains urgent-sounding donation requests. Scammers use urgency to trick donors. Confirm via official channels: ' + official);
-        return;
-      }
-    }
+    // const bodyText = document.body.innerText || '';
+    // if (/urgent|immediately|act now|send money|paypal|western union|venmo|gift card/i.test(bodyText)) {
+    //   if (!trusted.includes(hostname) && !hostname.endsWith('.gov.jm')) {
+    //     showWarning('This page contains urgent-sounding donation requests. Scammers use urgency to trick donors. Confirm via official channels: ' + official);
+    //     return;
+    //   }
+    // }
 
     // --- Improved Domain Similarity Check ---
     function normalizedLevenshtein(a, b) {
