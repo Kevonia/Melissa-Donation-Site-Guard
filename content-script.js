@@ -1,6 +1,18 @@
+
+// @license MIT
+// Jamaica Donation Guard - Browser Extension Security Script
+// Detects potential donation scam websites targeting Jamaica hurricane relief
+
+/**
+ * @fileoverview Security detection script for identifying potential donation scam websites
+ * targeting Jamaica hurricane relief efforts. Checks against known suspicious domains,
+ * verifies official government domains, and analyzes page content for scam indicators.
+ * @version 1.0.0
+ * @author  Kevonia Tomlinson
+ */
 (async () => {
   try {
-    const resp = await new Promise((res) => chrome.runtime.sendMessage({type: 'getLists'}, res));
+    const resp = await new Promise((res) => chrome.runtime.sendMessage({ type: 'getLists' }, res));
     const suspect = resp.suspectDomains || [];
     const trusted = resp.trustedDomains || [];
     const official = resp.officialPortal || 'supportjamaica.gov.jm';
@@ -11,7 +23,7 @@
       return;
     }
 
-    if (!hostname.endsWith('.gov.jm') && (hostname.includes('jamaica') || /melissa|hurricane|relief|donat/.test(hostname))) {
+    if (!hostname.endsWith('.gov.jm') && (hostname.includes('jamaica') || /melissa|hurricane|relief|donat/i.test(hostname))) {
       showWarning('This site looks like a donation collection page but does NOT end with .gov.jm. The official donation portal is ' + official + '. Be cautious.');
       return;
     }
@@ -28,29 +40,49 @@
       }
     }
 
-    const bodyText = document.body.innerText || '';
-    if (/urgent|immediately|act now|send money|paypal|western union|venmo|gift card/i.test(bodyText)) {
-      if (!trusted.includes(hostname) && !hostname.endsWith('.gov.jm')) {
-        showWarning('This page contains urgent-sounding donation requests. Scammers use urgency to trick donors. Confirm via official channels: ' + official);
-        return;
+    // const bodyText = document.body.innerText || '';
+    // if (/urgent|immediately|act now|send money|paypal|western union|venmo|gift card/i.test(bodyText)) {
+    //   if (!trusted.includes(hostname) && !hostname.endsWith('.gov.jm')) {
+    //     showWarning('This page contains urgent-sounding donation requests. Scammers use urgency to trick donors. Confirm via official channels: ' + official);
+    //     return;
+    //   }
+    // }
+
+    // --- Improved Domain Similarity Check ---
+    function normalizedLevenshtein(a, b) {
+      a = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+      b = b.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      if (!a.length || !b.length) return 0;
+      const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+        Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+      );
+
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
       }
+
+      const dist = dp[a.length][b.length];
+      return 1 - dist / Math.max(a.length, b.length);
     }
 
-    function simpleSimilarity(a,b){
-      const s1 = a.replace(/[^a-z0-9]/g,'');
-      const s2 = b.replace(/[^a-z0-9]/g,'');
-      const common = Array.from(new Set(s1.split(''))).filter(c => s2.includes(c)).length;
-      return common / Math.max(s1.length,1);
-    }
-    const sim = simpleSimilarity(hostname, official);
-    if (sim > 0.6 && hostname !== official) {
-      showWarning('This domain is very similar to the official portal. Verify spelling — the official site is ' + official);
+    const sim = normalizedLevenshtein(hostname, official);
+    if (sim > 0.85 && hostname !== official) {
+      showWarning(`⚠️ This domain (${hostname}) looks very similar to the official portal (${official}). Verify the URL carefully.`);
       return;
     }
+
   } catch (e) {
     console.error('Detector error', e);
   }
-
+   
   function showWarning(message) {
     if (document.getElementById('mdg-warning-overlay')) return;
     const overlay = document.createElement('div');
@@ -80,6 +112,8 @@
     document.body.appendChild(overlay);
     document.getElementById('mdg-dismiss').addEventListener('click', () => overlay.remove());
 
-    function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
   }
 })();
