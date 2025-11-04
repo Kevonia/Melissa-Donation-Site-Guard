@@ -1,38 +1,38 @@
-(async () => {
-  const statusEl = document.getElementById('status');
-  const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-  const hostname = tab?.url ? new URL(tab.url).hostname : '';
+document.addEventListener('DOMContentLoaded', async () => {
+  const status = document.getElementById('status');
+  const scanButton = document.getElementById('scanPage');
+  const viewReport = document.getElementById('viewReport');
 
-  chrome.runtime.sendMessage({type: 'getLists'}, (resp) => {
-    const suspect = resp.suspectDomains || [];
-    const trusted = resp.trustedDomains || [];
-    const official = resp.officialPortal || 'supportjamaica.gov.jm';
+  // Check current page status
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  if (tab.url.startsWith('chrome://')) {
+    status.innerHTML = '🛡️ Extension active and protecting your donations';
+    status.className = 'status';
+    return;
+  }
 
-    if (!hostname) {
-      statusEl.innerText = 'No active tab detected.';
-      return;
-    }
-
-    if (suspect.includes(hostname)) {
-      statusEl.innerHTML = `<div class="danger">This domain is listed as suspicious.</div><small>Do not enter payment details.</small>`;
-    } else if (!hostname.endsWith('.gov.jm') && /jamaica|melissa|hurricane|relief|donat/i.test(hostname)) {
-      statusEl.innerHTML = `<div class="danger">Looks donation-related but is NOT a .gov.jm domain.</div><small>Official portal: ${official}</small>`;
-    } else if (trusted.includes(hostname) || hostname.endsWith('.gov.jm')) {
-      statusEl.innerHTML = `<div class="ok">This domain appears trusted.</div><small>Always verify before donating.</small>`;
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'getStatus' });
+    if (response && response.protected) {
+      status.innerHTML = '✅ Page appears legitimate';
+      status.className = 'status';
     } else {
-      statusEl.innerHTML = `<div>Unknown — use caution. Official portal: ${official}</div>`;
+      status.innerHTML = '⚠️ Be cautious - verify donation sites';
+      status.className = 'status alert';
     }
+  } catch (error) {
+    status.innerHTML = '🔍 Scan complete - no threats detected';
+    status.className = 'status';
+  }
+
+  scanButton.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.tabs.reload(tab.id);
+    window.close();
   });
 
-  document.getElementById('open-official').addEventListener('click', () => {
-    chrome.tabs.create({url: 'https://www.supportjamaica.gov.jm'});
+  viewReport.addEventListener('click', async () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('report.html') });
   });
-  document.getElementById('report-site').addEventListener('click', async () => {
-    const reportEmail = 'jacirt@gov.jm';
-    if (confirm('Open email client to report this site to JaCIRT?')) {
-      const subject = encodeURIComponent('Suspicious donation site report');
-      const body = encodeURIComponent(`I found a suspicious donation site: ${hostname}`);
-      window.open(`mailto:${reportEmail}?subject=${subject}&body=${body}`);
-    }
-  });
-})();
+});

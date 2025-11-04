@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Melissa Donation Site Guard",
   "description": "Warns users about suspicious Hurricane Melissa donation websites and points to the official supportjamaica.gov.jm portal.",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
