@@ -1,11 +1,13 @@
-// Enhanced content script for detecting fraudulent donation sites
+// Enhanced content script for detecting fraudulent donation sites with domain reputation
 class DonationGuardDetector {
   constructor() {
     this.config = {
       officialPortal: 'supportjamaica.gov.jm',
       similarityThreshold: 0.82,
       scanInterval: 5000,
-      maxWarnings: 1
+      maxWarnings: 1,
+      reputationCheckTimeout: 10000,
+      minDomainAgeDays: 30
     };
     this.warningShown = false;
     this.detectionResults = {
@@ -13,16 +15,20 @@ class DonationGuardDetector {
       similarDomain: false,
       unofficialDonation: false,
       suspiciousForm: false,
-      scamContent: false
+      scamContent: false,
+      poorReputation: false,
+      newDomain: false,
+      suspiciousHosting: false
     };
     this.suspectDomains = [];
     this.trustedDomains = [];
+    this.domainReputationCache = new Map();
   }
 
   async initialize() {
     try {
       await this.getDomainLists();
-      this.performSecurityScan();
+      await this.performComprehensiveSecurityScan();
       this.startContinuousMonitoring();
       
       // Also monitor for new forms added dynamically
@@ -67,7 +73,7 @@ class DonationGuardDetector {
       
       if (shouldRescan && !this.warningShown) {
         this.scanForSuspiciousForms();
-        this.scanForScamContent();
+        // this.scanForScamContent();
       }
     });
 
@@ -77,7 +83,7 @@ class DonationGuardDetector {
     });
   }
 
-  performSecurityScan() {
+  async performComprehensiveSecurityScan() {
     const hostname = window.location.hostname.toLowerCase();
     
     // Check 1: Known suspect domains
@@ -89,11 +95,14 @@ class DonationGuardDetector {
     // Check 3: Unofficial donation sites
     if (this.checkUnofficialDonationSite(hostname)) return;
     
-    // Check 4: Suspicious forms
+    // Check 4: Domain reputation analysis
+    await this.checkDomainReputation(hostname);
+    
+    // Check 5: Suspicious forms
     this.scanForSuspiciousForms();
     
-    // Check 5: Scam content patterns
-    this.scanForScamContent();
+    // Check 6: Scam content patterns
+    // this.scanForScamContent();
   }
 
   checkSuspectDomains(hostname) {
@@ -149,6 +158,222 @@ class DonationGuardDetector {
       return true;
     }
     return false;
+  }
+
+  async checkDomainReputation(hostname) {
+    // Skip reputation check for trusted domains
+    if (this.isTrustedDomain()) return;
+
+    // Check cache first
+    if (this.domainReputationCache.has(hostname)) {
+      const reputation = this.domainReputationCache.get(hostname);
+      this.evaluateReputationResults(reputation, hostname);
+      return;
+    }
+
+    try {
+      const reputation = await this.analyzeDomainReputation(hostname);
+      this.domainReputationCache.set(hostname, reputation);
+      this.evaluateReputationResults(reputation, hostname);
+    } catch (error) {
+      console.warn('Domain reputation analysis failed:', error);
+    }
+  }
+
+  async analyzeDomainReputation(hostname) {
+    const analysis = {
+      domainAge: null,
+      registrar: null,
+      hostingProvider: null,
+      blacklistStatus: [],
+      sslValid: true,
+      riskScore: 0,
+      warnings: []
+    };
+
+    // 1. Domain age analysis
+    analysis.domainAge = await this.checkDomainAge(hostname);
+    if (analysis.domainAge && analysis.domainAge < this.config.minDomainAgeDays) {
+      analysis.riskScore += 30;
+      analysis.warnings.push(`New domain (${analysis.domainAge} days old)`);
+      this.detectionResults.newDomain = true;
+    }
+
+    // 2. SSL certificate check
+    analysis.sslValid = await this.checkSSLValidity(hostname);
+    if (!analysis.sslValid) {
+      analysis.riskScore += 20;
+      analysis.warnings.push('Invalid or expired SSL certificate');
+    }
+
+    // 3. Blacklist check
+    analysis.blacklistStatus = await this.checkBlacklists(hostname);
+    if (analysis.blacklistStatus.length > 0) {
+      analysis.riskScore += 40;
+      analysis.warnings.push(`Listed on ${analysis.blacklistStatus.length} blacklist(s)`);
+    }
+
+    // 4. Hosting provider analysis
+    analysis.hostingProvider = await this.analyzeHostingProvider(hostname);
+    if (this.isSuspiciousHosting(analysis.hostingProvider)) {
+      analysis.riskScore += 15;
+      analysis.warnings.push(`Suspicious hosting provider: ${analysis.hostingProvider}`);
+      this.detectionResults.suspiciousHosting = true;
+    }
+
+    // 5. Domain name analysis
+    const domainAnalysis = this.analyzeDomainName(hostname);
+    if (domainAnalysis.suspicious) {
+      analysis.riskScore += domainAnalysis.riskScore;
+      analysis.warnings.push(...domainAnalysis.warnings);
+    }
+
+    return analysis;
+  }
+
+  async checkDomainAge(hostname) {
+    try {
+      // Use WHOIS data via background script
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: 'checkDomainAge', domain: hostname },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve(null);
+              return;
+            }
+            resolve(response?.ageInDays || null);
+          }
+        );
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async checkSSLValidity(hostname) {
+    try {
+      // Check if current page has valid SSL
+      return window.location.protocol === 'https:' && 
+             !document.querySelector('[src*="http:"]'); // Mixed content check
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async checkBlacklists(hostname) {
+    try {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: 'checkBlacklists', domain: hostname },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve([]);
+              return;
+            }
+            resolve(response?.blacklists || []);
+          }
+        );
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async analyzeHostingProvider(hostname) {
+    try {
+      // Get IP and hosting info via background script
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: 'analyzeHosting', domain: hostname },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve('unknown');
+              return;
+            }
+            resolve(response?.hostingProvider || 'unknown');
+          }
+        );
+      });
+    } catch (error) {
+      return 'unknown';
+    }
+  }
+
+  analyzeDomainName(hostname) {
+    const result = {
+      suspicious: false,
+      riskScore: 0,
+      warnings: []
+    };
+
+    // Check for hyphens (common in scam domains)
+    const hyphenCount = (hostname.match(/-/g) || []).length;
+    if (hyphenCount > 2) {
+      result.riskScore += 10;
+      result.warnings.push('Multiple hyphens in domain name');
+      result.suspicious = true;
+    }
+
+    // Check for numbers in domain (except for legitimate cases)
+    if (/\d{2,}/.test(hostname) && !/\b(360|24|7)\b/.test(hostname)) {
+      result.riskScore += 10;
+      result.warnings.push('Suspicious numbers in domain');
+      result.suspicious = true;
+    }
+
+    // Check for suspicious TLDs
+    const suspiciousTLDs = ['.tk', '.ml', '.ga', '.cf', '.xyz', '.top', '.club'];
+    const hasSuspiciousTLD = suspiciousTLDs.some(tld => hostname.endsWith(tld));
+    if (hasSuspiciousTLD) {
+      result.riskScore += 20;
+      result.warnings.push('Suspicious TLD');
+      result.suspicious = true;
+    }
+
+    // Check for domain hiding techniques
+    if (hostname.includes('xn--')) {
+      result.riskScore += 15;
+      result.warnings.push('Punycode domain (possible homograph attack)');
+      result.suspicious = true;
+    }
+
+    return result;
+  }
+
+  isSuspiciousHosting(hostingProvider) {
+    const suspiciousProviders = [
+      'bulletproof',
+      'offshore',
+      'anonymous',
+      'freehost',
+      '000webhost',
+      'byethost'
+    ];
+    
+    return suspiciousProviders.some(provider => 
+      hostingProvider.toLowerCase().includes(provider)
+    );
+  }
+
+  evaluateReputationResults(reputation, hostname) {
+    if (reputation.riskScore >= 70) {
+      this.triggerWarning(
+        `🚨 HIGH RISK: This domain has poor reputation. ` +
+        `Risk factors: ${reputation.warnings.join(', ')}. ` +
+        `Avoid this site for donations.`,
+        'high'
+      );
+      this.detectionResults.poorReputation = true;
+    } else if (reputation.riskScore >= 40) {
+      this.triggerWarning(
+        `⚠️ CAUTION: This domain has some reputation issues. ` +
+        `Concerns: ${reputation.warnings.join(', ')}. ` +
+        `Verify legitimacy before donating.`,
+        'medium'
+      );
+      this.detectionResults.poorReputation = true;
+    }
   }
 
   hasDonationContent() {
@@ -336,24 +561,24 @@ class DonationGuardDetector {
     });
   }
 
-  scanForScamContent() {
-    const text = document.body.innerText.toLowerCase();
-    const scamPatterns = [
-      'urgent', 'immediate', 'act now', 'last chance', 'limited time',
-      'send money now', 'wire transfer', 'gift cards only',
-      'crypto donations', 'bitcoin accepted', 'western union'
-    ];
+  // scanForScamContent() {
+  //   const text = document.body.innerText.toLowerCase();
+  //   const scamPatterns = [
+  //     'urgent', 'immediate', 'act now', 'last chance', 'limited time',
+  //     'send money now', 'wire transfer', 'gift cards only',
+  //     'crypto donations', 'bitcoin accepted', 'western union'
+  //   ];
 
-    if (scamPatterns.some(pattern => text.includes(pattern)) && 
-        !this.isTrustedDomain()) {
-      this.triggerWarning(
-        `💡 ALERT: This page uses urgency tactics common in donation scams. ` +
-        `Legitimate relief efforts don't pressure donors with limited-time offers.`,
-        'low'
-      );
-      this.detectionResults.scamContent = true;
-    }
-  }
+  //   if (scamPatterns.some(pattern => text.includes(pattern)) && 
+  //       !this.isTrustedDomain()) {
+  //     this.triggerWarning(
+  //       `💡 ALERT: This page uses urgency tactics common in donation scams. ` +
+  //       `Legitimate relief efforts don't pressure donors with limited-time offers.`,
+  //       'low'
+  //     );
+  //     this.detectionResults.scamContent = true;
+  //   }
+  // }
 
   calculateSimilarity(str1, str2) {
     // Remove www and common TLDs for better comparison
@@ -405,6 +630,7 @@ class DonationGuardDetector {
           <button class="jdg-close" id="jdg-close">×</button>
         </div>
         <div class="jdg-message">${this.escapeHtml(message)}</div>
+        <div class="jdg-reputation" id="jdg-reputation"></div>
         <div class="jdg-actions">
           <a href="https://${this.config.officialPortal}" target="_blank" class="jdg-btn jdg-primary">
             🌐 Official Portal
@@ -423,6 +649,9 @@ class DonationGuardDetector {
     document.body.appendChild(warning);
     this.injectStyles();
 
+    // Add reputation details if available
+    this.addReputationDetails(warning);
+
     // Add event listeners
     const closeBtn = document.getElementById('jdg-close');
     const reportBtn = document.getElementById('jdg-report');
@@ -437,6 +666,26 @@ class DonationGuardDetector {
       reportBtn.addEventListener('click', () => {
         this.reportSite();
       });
+    }
+  }
+
+  addReputationDetails(warning) {
+    const reputationDiv = warning.querySelector('#jdg-reputation');
+    if (!reputationDiv) return;
+
+    const hostname = window.location.hostname;
+    const reputation = this.domainReputationCache.get(hostname);
+    
+    if (reputation && reputation.warnings.length > 0) {
+      reputationDiv.innerHTML = `
+        <div class="jdg-reputation-details">
+          <strong>Reputation Issues:</strong>
+          <ul>
+            ${reputation.warnings.map(warning => `<li>${this.escapeHtml(warning)}</li>`).join('')}
+          </ul>
+          <div class="jdg-risk-score">Risk Score: ${reputation.riskScore}/100</div>
+        </div>
+      `;
     }
   }
 
@@ -458,7 +707,7 @@ class DonationGuardDetector {
         top: 20px;
         right: 20px;
         z-index: 10000;
-        max-width: 400px;
+        max-width: 450px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         animation: jdgSlideIn 0.3s ease-out;
       }
@@ -514,6 +763,34 @@ class DonationGuardDetector {
         background: white;
       }
 
+      .jdg-reputation {
+        padding: 0 16px;
+        font-size: 12px;
+      }
+
+      .jdg-reputation-details {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .jdg-reputation-details ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+
+      .jdg-reputation-details li {
+        margin-bottom: 4px;
+      }
+
+      .jdg-risk-score {
+        font-weight: 600;
+        color: #856404;
+        margin-top: 8px;
+      }
+
       .jdg-actions {
         padding: 12px 16px;
         background: #f8f9fa;
@@ -558,11 +835,15 @@ class DonationGuardDetector {
 
   async reportSite() {
     try {
+      const hostname = window.location.hostname;
+      const reputation = this.domainReputationCache.get(hostname);
+      
       await chrome.runtime.sendMessage({
         type: 'reportSite',
         url: window.location.href,
-        hostname: window.location.hostname,
-        detectionResults: this.detectionResults
+        hostname: hostname,
+        detectionResults: this.detectionResults,
+        reputation: reputation
       });
       
       // Show confirmation
@@ -581,15 +862,19 @@ class DonationGuardDetector {
 
   async logDetection(message, level) {
     try {
+      const hostname = window.location.hostname;
+      const reputation = this.domainReputationCache.get(hostname);
+      
       await chrome.runtime.sendMessage({
         type: 'logDetection',
         details: {
           url: window.location.href,
-          hostname: window.location.hostname,
+          hostname: hostname,
           message,
           level,
           timestamp: new Date().toISOString(),
-          detectionResults: this.detectionResults
+          detectionResults: this.detectionResults,
+          reputation: reputation
         }
       });
     } catch (error) {
@@ -602,7 +887,7 @@ class DonationGuardDetector {
     setInterval(() => {
       if (!this.warningShown) {
         this.scanForSuspiciousForms();
-        this.scanForScamContent();
+        // this.scanForScamContent();
       }
     }, this.config.scanInterval);
   }
