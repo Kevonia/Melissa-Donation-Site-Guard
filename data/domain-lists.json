@@ -1,0 +1,42 @@
+{
+  "suspectDomains": [
+    "jamaicahurricanehelp.net",
+    "jamaicahurricanehelp.org",
+    "jamaica-hurricane-help.com",
+    "melissareliefjamaica.net",
+    "melissareliefjamaica.com",
+    "melissareliefjamaica.org",
+    "supportjamaicagovjm.com",
+    "supportjamaicagovjm.net",
+    "supportjamaica.gov.jm",
+    "hurricanemelissareliefconcert.com",
+    "aidjamaica.com",
+    "melissarelief.net",
+    "jamaicahelps.org",
+    "jamaica-relief.com",
+    "jamaicaaid.com",
+    "helpjamaicatoday.org",
+    "helpmelissa.com",
+    "donatetojamaica.org",
+    "helpjamaicatoday.com",
+    "jamaicareliefministries.org",
+    "melissahelp.org",
+    "melissafund.org",
+    "melissadonation.org",
+    "onelovereliefjamaica.org",
+    "onelovereliefjamaica.com",
+    "hurricanemelissajamaica.org"
+  ],
+  "trustedDomains": [
+    "opm.gov.jm",
+    "supportjamaica.gov.jm",
+    "mof.gov.jm",
+    "jamcovid19.moh.gov.jm",
+    "jis.gov.jm",
+    "psoj.org",
+    "jcdt.org.jm"
+  ],
+  "officialPortal": "supportjamaica.gov.jm",
+  "version": "1.0.0",
+  "lastUpdated": "2024-01-01T00:00:00Z"
+}

@@ -2,14 +2,26 @@
   "manifest_version": 3,
   "name": "Melissa Donation Site Guard",
   "description": "Warns users about suspicious Hurricane Melissa donation websites and points to the official supportjamaica.gov.jm portal.",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["scripting", "storage", "tabs", "activeTab"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "webRequest",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://supportjamaica.gov.jm/*",
+    "https://api.whois.rs/*",
+    "https://api.blacklistchecker.com/*",
+    "https://api.hostingchecker.com/*",
+    "https://opm.gov.jm/*",
+    "https://jacirt.gov.jm/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -18,7 +30,7 @@
     "default_title": "Melissa Donation Site Guard"
   },
   "content_scripts": [{
-    "matches": ["<all_urls>"],
+    "matches": ["*://*/*"],
     "js": ["content-script.js"],
     "run_at": "document_idle"
   }]
