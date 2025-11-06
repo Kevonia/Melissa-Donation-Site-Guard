@@ -35,7 +35,8 @@ class DonationGuardDetector {
       this.observeDOMChanges();
       
     } catch (error) {
-      console.error('Jamaica Donation Guard initialization failed:', error);
+  
+      
     }
   }
 
@@ -855,7 +856,7 @@ class DonationGuardDetector {
         }
       }
     } catch (error) {
-      console.error('Failed to report site:', error);
+      co
       alert('Failed to report site. Please try again or contact JaCIRT directly.');
     }
   }
@@ -878,7 +879,8 @@ class DonationGuardDetector {
         }
       });
     } catch (error) {
-      console.error('Failed to log detection:', error);
+ 
+      
     }
   }
 
